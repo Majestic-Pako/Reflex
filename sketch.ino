@@ -32,45 +32,62 @@ void setup() {
   pinMode(LED_VERDE, OUTPUT);
   pinMode(BUZZER, OUTPUT);
 
+  Serial.begin(9600);
   randomSeed(analogRead(A0));
 
   apagarTodo();
+
+  Serial.println("=== REFLEX v1.6 ===");
+  Serial.println("Duelo de reflejos con senales falsas.");
+  Serial.println("Presiona START para comenzar.");
 }
 
 void loop() {
+  Serial.println();
+  Serial.println("Esperando START...");
+
   while (digitalRead(BOTON_START) == HIGH) {
     // Espera hasta que se presione START
   }
 
   delay(300);
 
+  Serial.println("Ronda iniciada.");
   iniciarRonda();
 
   delay(3000);
   apagarTodo();
+
+  Serial.println("Ronda finalizada.");
 }
 
 void iniciarRonda() {
   apagarTodo();
 
   // Estado 1: preparados
+  Serial.println("Preparados...");
   digitalWrite(LED_ROJO, HIGH);
   emitirPitidos(1, 300, 150);
   delay(700);
   digitalWrite(LED_ROJO, LOW);
 
   // Estado 2: atentos
+  Serial.println("Atentos...");
   digitalWrite(LED_AMARILLO, HIGH);
   emitirPitidos(2, 260, 150);
   delay(700);
   digitalWrite(LED_AMARILLO, LOW);
 
-  // Senales falsas antes de la senal real
+  Serial.println("Esperando senal real...");
+  Serial.println("Cuidado: pueden aparecer senales falsas.");
+
   if (ejecutarSenialesFalsas()) {
     return;
   }
 
-  // Pre-senal verdadera: trampa sonora antes del LED verde
+  Serial.println("Pre-senal verdadera...");
+  Serial.println("Todavia NO presionar.");
+
   if (emitirPitidosConDeteccion(4, 220, 140)) {
     return;
   }
@@ -82,6 +99,9 @@ void iniciarRonda() {
   // Senal real: recien aca se habilita la respuesta
   digitalWrite(LED_VERDE, HIGH);
   iniciarSonido();
+
+  Serial.println("YA!");
+  Serial.println("Presionen ahora.");
 
   unsigned long tiempoInicio = millis();
   unsigned long inicioPitidoReal = millis();
@@ -116,6 +136,7 @@ bool ejecutarSenialesFalsas() {
       return true;
     }
 
+    Serial.println("Senal falsa!");
     if (mostrarSenialFalsa()) {
       return true;
     }
@@ -223,7 +244,16 @@ void detenerSonido() {
 }
 
 void ganador(int jugador, unsigned long tiempoInicio) {
+  unsigned long tiempoReaccion = millis() - tiempoInicio;
+
   apagarTodo();
+
+  Serial.print("Ganador: Jugador ");
+  Serial.println(jugador);
+
+  Serial.print("Tiempo de reaccion: ");
+  Serial.print(tiempoReaccion);
+  Serial.println(" ms");
 
   if (jugador == 1) {
     digitalWrite(LED_ROJO, HIGH);
@@ -235,8 +265,16 @@ void ganador(int jugador, unsigned long tiempoInicio) {
 void salidaFalsa(int jugador) {
   apagarTodo();
 
+  Serial.print("Salida falsa del Jugador ");
+  Serial.println(jugador);
+
+  if (jugador == 1) {
+    Serial.println("Ganador: Jugador 2");
+  } else {
+    Serial.println("Ganador: Jugador 1");
+  }
+
   // Ante una salida falsa se indica error con LED rojo.
-  // El ganador es el jugador contrario.
   digitalWrite(LED_ROJO, HIGH);
 }
 
