@@ -17,15 +17,15 @@
 
 ## Descripción general de conexiones
 
-| Elemento        | Tipo de pin     | Función                         |
-| --------------- | --------------- | ------------------------------- |
-| Botón central   | Entrada digital | Inicia la partida               |
-| Botón jugador 1 | Entrada digital | Detecta respuesta del jugador 1 |
-| Botón jugador 2 | Entrada digital | Detecta respuesta del jugador 2 |
-| LED rojo        | Salida digital  | Estado inicial o preparación    |
-| LED amarillo    | Salida digital  | Estado de atención/señal falsa  |
-| LED verde       | Salida digital  | Señal real para reaccionar      |
-| Buzzer          | Salida digital  | Señal sonora                    |
+| Elemento | Pin Arduino | Tipo de pin | Función |
+|---|---:|---|---|
+| Botón jugador 1 | D2 | Entrada digital | Detecta la respuesta del jugador 1 |
+| Botón jugador 2 | D3 | Entrada digital | Detecta la respuesta del jugador 2 |
+| Botón central | D4 | Entrada digital | Inicia la partida |
+| LED rojo | D8 | Salida digital | Indica preparación, fallo o resultado del jugador 1 |
+| LED amarillo | D6 | Salida digital | Indica atención, señal falsa o resultado del jugador 2 |
+| LED verde | D7 | Salida digital | Indica la señal real para reaccionar |
+| Buzzer | D11 | Salida digital | Emite señales sonoras del sistema |
 
 ## Proceso de armado
 
@@ -50,3 +50,5 @@ Los pulsadores se configuran con `INPUT_PULLUP`.
 En este modo, cada botón se conecta entre el pin digital correspondiente y GND. Cuando el botón no está presionado, Arduino lee `HIGH`. Cuando se presiona, Arduino lee `LOW`.
 
 Esta configuración evita lecturas inestables y permite simplificar el armado del circuito, ya que se utiliza la resistencia interna de pull-up del Arduino.
+
+Durante el resultado final, el LED rojo se utiliza para indicar victoria del jugador 1 y el LED amarillo para indicar victoria del jugador 2. El LED verde se reserva principalmente para indicar la señal real de reacción.

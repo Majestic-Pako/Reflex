@@ -38,6 +38,10 @@ Cuando aparece la señal real, indicada principalmente por el LED verde y el buz
 
 ## Diagrama de flujo
 
-El diagrama de flujo debe representar la lógica principal del programa:
+El diagrama de flujo representa la lógica principal del programa:
 
 Inicio → Esperar botón central → Preparación → Señal falsa o señal real → Verificar botones → Detectar fallo o ganador → Mostrar resultado → Reiniciar ronda.
+
+La imagen del diagrama se encuentra en:
+
+[`/docs/img/diagrama-flujo.png`](/docs/img/diagrama-conexion-v1.0.png)
