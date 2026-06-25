@@ -28,6 +28,6 @@ Desarrollar un prototipo funcional con Arduino que permita medir la reacción de
 
 ## Enlaces
 
-* Simulación Wokwi: `PEGAR_LINK_WOKWI`
+* Simulación Wokwi: `https://wokwi.com/projects/467573832377455617`
 * Código fuente: `src/reflex.ino`
 * Documentación: carpeta `docs/`
