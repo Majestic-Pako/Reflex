@@ -73,7 +73,7 @@
   <tr>
     <td><strong>Diagrama de conexión</strong></td>
     <td>Esquema visual de conexiones físicas.</td>
-    <td><a href="docs/img/diagrama-conexion-v1.0.png">diagrama-conexion-v1.0.png</a></td>
+    <td><a href="docs/img/diagrama-conexion-v2.0.png">diagrama-conexion-v2.0.png</a></td>
   </tr>
   <tr>
     <td><strong>Diagrama de flujo</strong></td>
@@ -90,5 +90,5 @@
 ## Diagrama de conexión
 
 <p align="center">
-  <img src="docs/img/diagrama-conexion-v1.0.png" alt="Diagrama de conexión del prototipo Reflex" width="700">
+  <img src="docs/img/diagrama-conexion-v2.0.png" alt="Diagrama de conexión del prototipo Reflex" width="700">
 </p>

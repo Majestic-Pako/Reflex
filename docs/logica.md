@@ -44,4 +44,4 @@ Inicio → Esperar botón central → Preparación → Señal falsa o señal rea
 
 La imagen del diagrama se encuentra en:
 
-[`/docs/img/diagrama-flujo.png`](/docs/img/diagrama-conexion-v1.0.png)
+[`/docs/img/diagrama-flujo.png`](/docs/img/diagrama-conexion-v2.0.png)
