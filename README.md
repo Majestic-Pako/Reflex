@@ -80,6 +80,11 @@
     <td>Representación de la lógica principal del programa.</td>
     <td><a href="docs/img/diagrama-flujo.png">diagrama-flujo.png</a></td>
   </tr>
+  <tr>
+    <td><strong>Link a Wokwi</strong></td>
+    <td>Simulacion Realizada en Wokwi</td>
+    <td><a href="https://wokwi.com/projects/467573832377455617">Ir</a></td>
+  </tr>
 </table>
 
 ## Diagrama de conexión
