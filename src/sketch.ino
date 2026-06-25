@@ -15,6 +15,7 @@ const int LED_VERDE = 7;
 // Buzzer
 const int BUZZER = 11;
 
+// Por si falla el buzzer cambiar esto :]
 // false = usar tone()
 // true  = usar HIGH/LOW si el buzzer fisico fuera activo
 const bool BUZZER_ACTIVO = false;
@@ -37,8 +38,8 @@ void setup() {
 
   apagarTodo();
 
-  Serial.println("=== REFLEX v1.6 ===");
-  Serial.println("Duelo de reflejos con senales falsas.");
+  Serial.println("= REFLEX v2.0 =");
+  Serial.println("Duelo de reflejos con señales falsas.");
   Serial.println("Presiona START para comenzar.");
 }
 
@@ -47,7 +48,7 @@ void loop() {
   Serial.println("Esperando START...");
 
   while (digitalRead(BOTON_START) == HIGH) {
-    // Espera hasta que se presione START
+
   }
 
   delay(300);
@@ -100,7 +101,7 @@ void iniciarRonda() {
   digitalWrite(LED_VERDE, HIGH);
   iniciarSonido();
 
-  Serial.println("YA!");
+  Serial.println("Go!");
   Serial.println("Presionen ahora.");
 
   unsigned long tiempoInicio = millis();
@@ -136,7 +137,7 @@ bool ejecutarSenialesFalsas() {
       return true;
     }
 
-    Serial.println("Senal falsa!");
+    Serial.println("Señal falsa!");
     if (mostrarSenialFalsa()) {
       return true;
     }
@@ -156,7 +157,6 @@ bool ejecutarSenialesFalsas() {
 }
 
 bool mostrarSenialFalsa() {
-  // Senal falsa:
   // Amarillo titila 3 veces y el buzzer suena 3 veces.
   // No habilita la respuesta.
 
