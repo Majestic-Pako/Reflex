@@ -31,7 +31,7 @@ La arquitectura prevista para la nueva versión es:
 ESP32 en Wokwi → Supabase → Vue
 ```
 
-Supabase todavía no está integrado.
+El cliente de Supabase está configurado en el frontend. El esquema de datos y la persistencia de partidas todavía están pendientes.
 
 ## Funcionalidades
 
