@@ -1,3 +1,18 @@
+import { supabase } from './supabase'
+
+export async function obtenerJugadores() {
+  const { data, error } = await supabase
+    .from('jugadores')
+    .select('id, nombre, puntaje, errores, victorias, updated_at')
+    .order('puntaje', { ascending: false })
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
 /**
  * Prepara los datos de una partida sin asumir nombres de tablas o columnas.
  * La persistencia se agregara cuando el esquema de Supabase este definido.
