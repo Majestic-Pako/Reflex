@@ -1,54 +1,155 @@
-# - Armado del prototipo
+# Componentes, conexiones y servicios
 
-## Lista de componentes
+## Hardware
 
-| Componente         | Cantidad | Función                           |
-| ------------------ | -------: | --------------------------------- |
-| Arduino Uno        |        1 | Controlador principal             |
-| Protoboard         |        1 | Base de conexión                  |
-| Pulsadores         |        3 | Inicio, jugador 1 y jugador 2     |
-| LED rojo           |        1 | Estado inicial o preparación      |
-| LED amarillo       |        1 | Estado de atención / señal falsa  |
-| LED verde          |        1 | Señal real de reacción            |
-| Buzzer             |        1 | Señales sonoras del sistema       |
-| Resistencias       |   Varias | Protección de LEDs                |
-| Cables macho-macho |   Varios | Conexiones entre componentes      |
-| Cable USB A/B      |        1 | Alimentación y carga del programa |
+| Cantidad | Componente | Función principal |
+| -------: | ---------- | ----------------- |
+| 1 | ESP32 | Ejecuta la lógica y proporciona conexión WiFi |
+| 1 | Pantalla LCD 16x2 con I2C | Muestra instrucciones, secuencias y resultados |
+| 1 | Control remoto infrarrojo | Permite ingresar el nombre y responder |
+| 1 | Receptor infrarrojo | Recibe los comandos del control |
+| 1 | LED verde | Indica una ronda superada |
+| 1 | LED rojo | Indica un error o el final de la partida |
+| 1 | Buzzer | Proporciona señales sonoras |
+| 2 | Resistencias de 220 Ω | Limitan la corriente de los LEDs |
+| 1 | Protoboard | Permite montar el circuito sin soldaduras |
+| Varias | Cables | Conectan los componentes y la alimentación |
 
-## Descripción general de conexiones
+### ESP32
 
-| Elemento | Pin Arduino | Tipo de pin | Función |
-|---|---:|---|---|
-| Botón jugador 1 | D2 | Entrada digital | Detecta la respuesta del jugador 1 |
-| Botón jugador 2 | D3 | Entrada digital | Detecta la respuesta del jugador 2 |
-| Botón central | D4 | Entrada digital | Inicia la partida |
-| LED rojo | D8 | Salida digital | Indica preparación, fallo o resultado del jugador 1 |
-| LED amarillo | D6 | Salida digital | Indica atención, señal falsa o resultado del jugador 2 |
-| LED verde | D7 | Salida digital | Indica la señal real para reaccionar |
-| Buzzer | D11 | Salida digital | Emite señales sonoras del sistema |
+El ESP32 controla la lógica del juego, procesa las señales del receptor IR, actualiza las salidas y calcula el resultado. Su conectividad WiFi integrada permite enviar los datos a la API mediante HTTPS sin un módulo de red adicional.
 
-## Proceso de armado
+### Pantalla LCD 16x2 con I2C
 
-1. Se coloca el Arduino Uno junto a la protoboard.
-2. Se conectan los LEDs a pines digitales de salida.
-3. Se agregan resistencias para proteger los LEDs.
-4. Se conecta el buzzer a un pin digital y a GND.
-5. Se conectan los tres pulsadores:
+La pantalla comunica el ingreso del nombre, la ronda, la secuencia, el progreso, el tiempo restante, el resultado y el estado del guardado. El módulo I2C reduce la conexión a las líneas SDA y SCL. La dirección configurada es `0x27`.
 
-   * Botón central de inicio.
-   * Botón del jugador 1.
-   * Botón del jugador 2.
-6. Se verifica que todos los componentes compartan la misma línea de GND.
-7. Se carga el código en Arduino o en la simulación de Wokwi.
-8. Se prueba el funcionamiento mediante los botones, LEDs, buzzer y monitor serial.
-9. Se valida que el sistema diferencie correctamente entre señal falsa, señal real, victoria y fallo por adelantarse.
+### Control y receptor infrarrojos
 
-## Nota sobre los pulsadores
+El control remoto es la entrada principal: permite escribir el nombre, confirmar o borrar caracteres, responder con las teclas 1, 2 y 3 e iniciar una nueva partida. El receptor decodifica cada comando y lo entrega al ESP32 mediante GPIO 33.
 
-Los pulsadores se configuran con `INPUT_PULLUP`.
+### Indicadores
 
-En este modo, cada botón se conecta entre el pin digital correspondiente y GND. Cuando el botón no está presionado, Arduino lee `HIGH`. Cuando se presiona, Arduino lee `LOW`.
+- El LED verde, conectado a GPIO 26, confirma una ronda superada.
+- El LED rojo, conectado a GPIO 25, indica una respuesta incorrecta, el vencimiento del tiempo o el final de la partida.
+- El buzzer, conectado a GPIO 27, diferencia la confirmación y el error mediante tonos.
 
-Esta configuración evita lecturas inestables y permite simplificar el armado del circuito, ya que se utiliza la resistencia interna de pull-up del Arduino.
+Cada LED utiliza una resistencia de aproximadamente 220 Ω. Todos los componentes deben compartir una conexión común a GND.
 
-Durante el resultado final, el LED rojo se utiliza para indicar victoria del jugador 1 y el LED amarillo para indicar victoria del jugador 2. El LED verde se reserva principalmente para indicar la señal real de reacción.
+## Conexiones
+
+### Resumen de pines
+
+| Componente | Pin ESP32 |
+| ---------- | --------- |
+| Receptor infrarrojo | GPIO 33 |
+| LED rojo | GPIO 25 |
+| LED verde | GPIO 26 |
+| Buzzer | GPIO 27 |
+| LCD SDA | GPIO 21 |
+| LCD SCL | GPIO 22 |
+
+### Pantalla LCD
+
+| Pin LCD I2C | Conexión ESP32 |
+| ----------- | -------------- |
+| VCC | 5V |
+| GND | GND |
+| SDA | GPIO 21 |
+| SCL | GPIO 22 |
+
+```cpp
+Wire.begin(21, 22);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+```
+
+### Receptor IR y salidas
+
+```cpp
+const int PIN_IR = 33;
+const int LED_ROJO = 25;
+const int LED_VERDE = 26;
+const int BUZZER = 27;
+```
+
+La alimentación del receptor debe respetar la tensión admitida por el módulo utilizado. Su pin de señal se conecta a GPIO 33.
+
+## Conectividad y servicios
+
+### WiFi
+
+La conectividad está integrada en el ESP32. En la simulación se utiliza la red:
+
+```cpp
+Wokwi-GUEST
+```
+
+Al finalizar la partida, el ESP32 verifica la conexión y realiza una solicitud HTTPS a la API de resultados.
+
+### Wokwi
+
+Wokwi simula el ESP32 y los componentes electrónicos. Permite probar la entrada infrarroja, la pantalla, los indicadores, el temporizador, la conexión WiFi y las solicitudes HTTPS.
+
+### Vercel, Supabase y aplicación web
+
+Vercel aloja la API que recibe y procesa los resultados. Supabase almacena el nombre, el puntaje, las rondas acertadas, la ronda alcanzada y la fecha del registro. La aplicación web consulta estos datos para presentar las partidas y el ranking.
+
+La integración sigue esta arquitectura:
+
+**ESP32 → API en Vercel → Supabase → Aplicación web**
+
+## Librerías
+
+| Librería | Uso |
+| -------- | --- |
+| `Wire.h` | Comunicación I2C con la pantalla |
+| `LiquidCrystal_I2C.h` | Control de la pantalla LCD 16x2 |
+| `IRremote.hpp` | Recepción y decodificación de comandos IR |
+| `WiFi.h` | Conexión del ESP32 a la red WiFi |
+| `HTTPClient.h` | Envío de la solicitud `POST` |
+| `WiFiClientSecure.h` | Creación de la conexión HTTPS |
+
+```cpp
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <IRremote.hpp>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+```
+
+### Inicialización de periféricos
+
+El receptor IR se inicializa sin retroalimentación luminosa propia:
+
+```cpp
+IrReceiver.begin(PIN_IR, DISABLE_LED_FEEDBACK);
+```
+
+La conexión WiFi utiliza el ESP32 en modo estación:
+
+```cpp
+WiFi.mode(WIFI_STA);
+WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+```
+
+### Solicitud HTTPS
+
+`HTTPClient` envía el resultado como JSON:
+
+```cpp
+http.addHeader("Content-Type", "application/json");
+int httpCode = http.POST(jsonBody);
+```
+
+En Wokwi, el cliente seguro se configura de la siguiente manera:
+
+```cpp
+WiFiClientSecure client;
+client.setInsecure();
+```
+
+Esta configuración conserva HTTPS, pero omite la validación local del certificado porque la simulación no dispone del certificado raíz necesario. En un entorno de producción debe utilizarse el certificado correspondiente.
+
+## Funciones del entorno Arduino
+
+El programa también utiliza funciones provistas por Arduino y ESP32, entre ellas `pinMode()`, `digitalWrite()`, `delay()`, `millis()`, `tone()`, `noTone()`, `random()`, `randomSeed()`, `map()`, `snprintf()` y las funciones de `Serial`.
