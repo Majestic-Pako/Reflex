@@ -49,6 +49,16 @@ const ultimaPartida = computed(() => {
     ).result
   }
 
+  const resultsWithNumericId = resultados.value.filter((result) =>
+    Number.isFinite(Number(result.id)),
+  )
+
+  if (resultsWithNumericId.length) {
+    return resultsWithNumericId.reduce((latest, current) =>
+      Number(current.id) > Number(latest.id) ? current : latest,
+    )
+  }
+
   return resultados.value.at(-1)
 })
 
@@ -56,6 +66,7 @@ onMounted(async () => {
   try {
     const data = await obtenerJugadores()
     resultados.value = Array.isArray(data) ? data : []
+    console.info(`Resultados reales cargados desde Supabase: ${resultados.value.length}`)
   } catch (error) {
     console.error('Error al cargar los resultados de Reflex Code:', error)
     errorMessage.value = 'No pudimos actualizar los resultados. El resto del sitio sigue disponible.'

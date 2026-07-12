@@ -3,11 +3,10 @@ import { supabase } from './supabase'
 export async function obtenerJugadores() {
   const { data, error } = await supabase
     .from('jugadores')
-    .select('id, nombre, puntaje, rondas_acertadas, ronda_alcanzada, updated_at')
-    .order('puntaje', { ascending: false })
-    .order('ronda_alcanzada', { ascending: false })
+    .select('*')
 
   if (error) {
+    console.error('Error al obtener jugadores:', error)
     throw error
   }
 
