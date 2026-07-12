@@ -1,14 +1,42 @@
+/*
+  Proyecto: Reflex
+  Plataforma: ESP32
+
+  Juego de memoria y reflejos controlado mediante un control infrarrojo.
+  El jugador ingresa su nombre, memoriza secuencias numéricas y debe
+  repetirlas antes de que finalice el tiempo disponible.
+
+  Al terminar la partida, el resultado se envía mediante HTTPS a una
+  API web para su almacenamiento.
+*/
+
+// Comunicación I2C con la pantalla LCD.
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+
+// Lectura del control remoto infrarrojo.
 #include <IRremote.hpp>
 
-// Pines
+// Conexión WiFi y solicitudes HTTPS.
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+
+// Configuración de red.
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
+
+// API utilizada para guardar los resultados.
+const char* API_RESULTADOS_URL =
+  "https://reflex-pied.vercel.app/api/resultados";
+
+// Pines del ESP32.
 const int PIN_IR = 33;
 const int LED_ROJO = 25;
 const int LED_VERDE = 26;
 const int BUZZER = 27;
 
-// Codigos IR
+// Códigos del control infrarrojo.
 const uint16_t TECLA_1 = 0x30;
 const uint16_t TECLA_2 = 0x18;
 const uint16_t TECLA_3 = 0x7A;
@@ -20,7 +48,7 @@ const uint16_t TECLA_8 = 0x4A;
 const uint16_t TECLA_9 = 0x52;
 const uint16_t TECLA_ACEPTAR = 0xA8;
 
-// Configuracion del juego
+// Configuración del juego.
 const int LONGITUD_INICIAL = 3;
 const int LONGITUD_MAXIMA = 8;
 const unsigned long TIEMPO_MEMORIZACION = 3000;
@@ -29,8 +57,9 @@ const unsigned long INTERVALO_BARRA = 100;
 const int TAMANIO_BARRA = 8;
 const int PUNTOS_POR_RONDA = 100;
 
-// Configuracion del nombre
+// Configuración del ingreso de nombre.
 const int LONGITUD_NOMBRE_MAXIMA = 4;
+
 const char* LETRAS_TECLA_2 = "ABC";
 const char* LETRAS_TECLA_3 = "DEF";
 const char* LETRAS_TECLA_4 = "GHI";
@@ -40,7 +69,7 @@ const char* LETRAS_TECLA_7 = "PQRS";
 const char* LETRAS_TECLA_8 = "TUV";
 const char* LETRAS_TECLA_9 = "WXYZ";
 
-// Estados y datos
+// Estados posibles del juego.
 enum EstadoJuego {
   INGRESANDO_NOMBRE,
   PREPARANDO_RONDA,
@@ -50,12 +79,14 @@ enum EstadoJuego {
   JUEGO_TERMINADO
 };
 
+// Motivos posibles de finalización.
 enum MotivoFin {
   SIN_MOTIVO,
   FIN_POR_ERROR,
   FIN_POR_TIEMPO
 };
 
+// Información utilizada durante el ingreso del nombre.
 struct DatosJugador {
   char nombre[LONGITUD_NOMBRE_MAXIMA + 1];
   int longitudNombre;
@@ -64,6 +95,7 @@ struct DatosJugador {
   int indiceLetraPendiente;
 };
 
+// Información interna de la partida.
 struct DatosPartida {
   int secuencia[LONGITUD_MAXIMA];
   int longitudSecuencia;
@@ -76,33 +108,43 @@ struct DatosPartida {
   int teclaRecibidaFinal;
 };
 
+// Información enviada a la API.
 struct ResultadoPartida {
-  char nombre[LONGITUD_NOMBRE_MAXIMA + 1];
+  String nombre;
   int puntaje;
   int rondasAcertadas;
   int rondaAlcanzada;
-  MotivoFin motivoFin;
-  int teclaEsperada;
-  int teclaRecibida;
 };
 
+// Estado general del programa.
 EstadoJuego estadoActual = INGRESANDO_NOMBRE;
 DatosJugador jugador = {};
 DatosPartida partida = {};
+
+bool resultadoGuardado = false;
+bool envioIntentado = false;
+
+// Pantalla LCD 16x2 con dirección I2C 0x27.
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// Prototipos
+// Prototipos de utilidades.
 void apagarSalidas();
 void escribirLineaLCD(uint8_t fila, const char* texto);
 void mostrarMensaje(const char* linea1, const char* linea2);
 void reiniciarJugador();
 void reiniciarPartida();
+
 int calcularPuntaje(int rondasAcertadas);
 const char* textoMotivoFin(MotivoFin motivo);
 int obtenerNumeroTecla(uint16_t comando);
 const char* obtenerLetrasPorTecla(uint16_t comando);
 bool esTeclaNombre(uint16_t comando);
 
+// Prototipos de conexión y persistencia.
+bool conectarWiFi();
+bool enviarResultado(const ResultadoPartida& resultado);
+
+// Prototipos del ingreso de nombre.
 void mostrarPantallaNombre();
 void iniciarIngresoNombre();
 void seleccionarLetra(uint16_t comando);
@@ -110,6 +152,7 @@ void confirmarLetraPendiente();
 void borrarUltimaLetra();
 void procesarAceptarNombre();
 
+// Prototipos de la partida.
 void generarSecuencia();
 void mostrarSecuencia();
 void mostrarBarraTiempo();
@@ -122,21 +165,23 @@ void procesarRespuesta(int numeroPulsado);
 void superarRonda();
 void perderPorError(int numeroPulsado, int numeroEsperado);
 void perderPorTiempo();
+
 void finalizarPartida(
   MotivoFin motivo,
   int teclaEsperada,
   int teclaRecibida
 );
 
+// Prototipos del resultado final.
 ResultadoPartida construirResultadoFinal();
 void mostrarResultadoLCD(const ResultadoPartida& resultado);
 void mostrarResultadoSerial(const ResultadoPartida& resultado);
 void procesarResultadoFinal(const ResultadoPartida& resultado);
 
-void setup();
-void loop();
-
+// ------------------------------------------------------------
 // Utilidades de hardware y estado
+// ------------------------------------------------------------
+
 void apagarSalidas() {
   digitalWrite(LED_ROJO, LOW);
   digitalWrite(LED_VERDE, LOW);
@@ -147,6 +192,7 @@ void escribirLineaLCD(uint8_t fila, const char* texto) {
   lcd.setCursor(0, fila);
 
   int columna = 0;
+
   while (columna < 16 && texto[columna] != '\0') {
     lcd.print(texto[columna]);
     columna++;
@@ -181,6 +227,9 @@ void reiniciarPartida() {
   partida.motivoFin = SIN_MOTIVO;
   partida.teclaEsperadaFinal = -1;
   partida.teclaRecibidaFinal = -1;
+
+  resultadoGuardado = false;
+  envioIntentado = false;
 }
 
 int calcularPuntaje(int rondasAcertadas) {
@@ -191,8 +240,10 @@ const char* textoMotivoFin(MotivoFin motivo) {
   switch (motivo) {
     case FIN_POR_ERROR:
       return "ERROR";
+
     case FIN_POR_TIEMPO:
       return "TIEMPO";
+
     default:
       return "SIN DEFINIR";
   }
@@ -202,10 +253,13 @@ int obtenerNumeroTecla(uint16_t comando) {
   switch (comando) {
     case TECLA_1:
       return 1;
+
     case TECLA_2:
       return 2;
+
     case TECLA_3:
       return 3;
+
     default:
       return -1;
   }
@@ -215,20 +269,28 @@ const char* obtenerLetrasPorTecla(uint16_t comando) {
   switch (comando) {
     case TECLA_2:
       return LETRAS_TECLA_2;
+
     case TECLA_3:
       return LETRAS_TECLA_3;
+
     case TECLA_4:
       return LETRAS_TECLA_4;
+
     case TECLA_5:
       return LETRAS_TECLA_5;
+
     case TECLA_6:
       return LETRAS_TECLA_6;
+
     case TECLA_7:
       return LETRAS_TECLA_7;
+
     case TECLA_8:
       return LETRAS_TECLA_8;
+
     case TECLA_9:
       return LETRAS_TECLA_9;
+
     default:
       return nullptr;
   }
@@ -238,7 +300,109 @@ bool esTeclaNombre(uint16_t comando) {
   return obtenerLetrasPorTecla(comando) != nullptr;
 }
 
+// ------------------------------------------------------------
+// Conexión WiFi y envío de resultados
+// ------------------------------------------------------------
+
+bool conectarWiFi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
+  }
+
+  Serial.println("Conectando a WiFi...");
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  const unsigned long TIMEOUT_WIFI = 15000;
+  unsigned long inicio = millis();
+
+  while (
+    WiFi.status() != WL_CONNECTED &&
+    millis() - inicio < TIMEOUT_WIFI
+  ) {
+    delay(250);
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("No se pudo conectar a WiFi");
+    return false;
+  }
+
+  Serial.println("WiFi conectado");
+
+  return true;
+}
+
+bool enviarResultado(const ResultadoPartida& resultado) {
+  if (!conectarWiFi()) {
+    return false;
+  }
+
+  String jsonBody =
+    "{\"nombre\":\"" +
+    resultado.nombre +
+    "\",\"puntaje\":" +
+    String(resultado.puntaje) +
+    ",\"rondas_acertadas\":" +
+    String(resultado.rondasAcertadas) +
+    ",\"ronda_alcanzada\":" +
+    String(resultado.rondaAlcanzada) +
+    "}";
+
+  Serial.println("Enviando resultado...");
+
+  WiFiClientSecure client;
+
+  /*
+    La simulación de Wokwi no dispone del certificado raíz
+    utilizado por la API. Se mantiene HTTPS, pero se omite
+    la validación local del certificado.
+  */
+  client.setInsecure();
+
+  HTTPClient http;
+
+  if (!http.begin(client, API_RESULTADOS_URL)) {
+    Serial.println("No se pudo iniciar la conexion HTTPS");
+    return false;
+  }
+
+  http.setConnectTimeout(15000);
+  http.setTimeout(15000);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  http.addHeader("Content-Type", "application/json");
+
+  int httpCode = http.POST(jsonBody);
+
+  bool guardado =
+    httpCode >= 200 &&
+    httpCode < 300;
+
+  if (httpCode > 0) {
+    Serial.print("Respuesta del servidor: ");
+    Serial.println(httpCode);
+  } else {
+    Serial.print("Error de conexion: ");
+    Serial.println(http.errorToString(httpCode));
+  }
+
+  if (guardado) {
+    Serial.println("Resultado guardado");
+  } else {
+    Serial.println("No se pudo guardar el resultado");
+  }
+
+  http.end();
+
+  return guardado;
+}
+
+// ------------------------------------------------------------
 // Ingreso de nombre
+// ------------------------------------------------------------
+
 void mostrarPantallaNombre() {
   char lineaNombre[LONGITUD_NOMBRE_MAXIMA + 1];
 
@@ -256,19 +420,20 @@ void mostrarPantallaNombre() {
   }
 
   lineaNombre[LONGITUD_NOMBRE_MAXIMA] = '\0';
+
   mostrarMensaje("Nombre:", lineaNombre);
 }
 
 void iniciarIngresoNombre() {
   estadoActual = INGRESANDO_NOMBRE;
+
   apagarSalidas();
   reiniciarJugador();
   reiniciarPartida();
   mostrarPantallaNombre();
 
   Serial.println();
-  Serial.println("Ingreso de nombre iniciado");
-  Serial.println("Usa 2-9 y pulsa START para confirmar");
+  Serial.println("Ingresa tu nombre");
 }
 
 void seleccionarLetra(uint16_t comando) {
@@ -277,6 +442,7 @@ void seleccionarLetra(uint16_t comando) {
   }
 
   const char* letras = obtenerLetrasPorTecla(comando);
+
   if (letras == nullptr) {
     return;
   }
@@ -310,12 +476,14 @@ void confirmarLetraPendiente() {
 
   jugador.nombre[jugador.longitudNombre] =
     jugador.letraPendiente;
+
   jugador.longitudNombre++;
   jugador.nombre[jugador.longitudNombre] = '\0';
 
   jugador.letraPendiente = '\0';
   jugador.ultimaTeclaNombre = 0;
   jugador.indiceLetraPendiente = 0;
+
   mostrarPantallaNombre();
 }
 
@@ -324,6 +492,7 @@ void borrarUltimaLetra() {
     jugador.letraPendiente = '\0';
     jugador.ultimaTeclaNombre = 0;
     jugador.indiceLetraPendiente = 0;
+
     mostrarPantallaNombre();
     return;
   }
@@ -334,6 +503,7 @@ void borrarUltimaLetra() {
 
   jugador.longitudNombre--;
   jugador.nombre[jugador.longitudNombre] = '\0';
+
   mostrarPantallaNombre();
 }
 
@@ -350,26 +520,20 @@ void procesarAceptarNombre() {
     return;
   }
 
-  Serial.println();
   Serial.print("Nombre confirmado: ");
   Serial.println(jugador.nombre);
+
   iniciarPartida();
 }
 
+// ------------------------------------------------------------
 // Secuencias y rondas
+// ------------------------------------------------------------
+
 void generarSecuencia() {
   for (int i = 0; i < partida.longitudSecuencia; i++) {
     partida.secuencia[i] = random(1, 4);
   }
-
-  Serial.print("Secuencia generada: ");
-  for (int i = 0; i < partida.longitudSecuencia; i++) {
-    Serial.print(partida.secuencia[i]);
-    if (i < partida.longitudSecuencia - 1) {
-      Serial.print(' ');
-    }
-  }
-  Serial.println();
 }
 
 void mostrarSecuencia() {
@@ -381,7 +545,8 @@ void mostrarSecuencia() {
     i < partida.longitudSecuencia && indice < 16;
     i++
   ) {
-    lineaSecuencia[indice++] = '0' + partida.secuencia[i];
+    lineaSecuencia[indice++] =
+      '0' + partida.secuencia[i];
 
     if (
       i < partida.longitudSecuencia - 1 &&
@@ -392,9 +557,13 @@ void mostrarSecuencia() {
   }
 
   lineaSecuencia[indice] = '\0';
+
   estadoActual = MOSTRANDO_SECUENCIA;
+
   mostrarMensaje("Memoriza:", lineaSecuencia);
+
   delay(TIEMPO_MEMORIZACION);
+
   iniciarTiempoRespuesta();
 }
 
@@ -418,6 +587,7 @@ void mostrarBarraTiempo() {
   );
 
   char barra[13] = "T:[--------]";
+
   for (int i = 0; i < TAMANIO_BARRA; i++) {
     if (i < bloquesActivos) {
       barra[3 + i] = '#';
@@ -436,6 +606,7 @@ void mostrarProgresoRespuesta() {
   }
 
   progreso[8 + partida.longitudSecuencia] = '\0';
+
   escribirLineaLCD(0, progreso);
 }
 
@@ -443,55 +614,66 @@ void iniciarPartida() {
   apagarSalidas();
   reiniciarPartida();
 
-  Serial.println();
-  Serial.print("Nueva partida de: ");
-  Serial.println(jugador.nombre);
+  Serial.println("Partida iniciada");
 
   char lineaJugador[17];
+
   snprintf(
     lineaJugador,
     sizeof(lineaJugador),
     "Jugador:%s",
     jugador.nombre
   );
+
   mostrarMensaje(lineaJugador, "Preparate...");
+
   delay(1500);
+
   iniciarRonda();
 }
 
 void iniciarRonda() {
   apagarSalidas();
+
   partida.posicionActual = 0;
   estadoActual = PREPARANDO_RONDA;
 
   char lineaRonda[17];
+
   snprintf(
     lineaRonda,
     sizeof(lineaRonda),
     "Ronda %d",
     partida.rondasAcertadas + 1
   );
+
   mostrarMensaje(lineaRonda, jugador.nombre);
 
-  Serial.print("Iniciando ronda ");
+  Serial.print("Ronda ");
   Serial.println(partida.rondasAcertadas + 1);
 
   delay(1000);
+
   generarSecuencia();
   mostrarSecuencia();
 }
 
 void iniciarTiempoRespuesta() {
   lcd.clear();
+
   partida.posicionActual = 0;
   partida.inicioRespuesta = millis();
   partida.ultimaActualizacionBarra = 0;
   estadoActual = ESPERANDO_RESPUESTA;
+
   mostrarProgresoRespuesta();
   mostrarBarraTiempo();
 }
 
-// Temporizador y evaluacion
+// ------------------------------------------------------------
+// Temporizador y evaluación de respuestas
+// ------------------------------------------------------------
+
 void actualizarTiempoRespuesta() {
   if (estadoActual != ESPERANDO_RESPUESTA) {
     return;
@@ -525,17 +707,13 @@ void procesarRespuesta(int numeroPulsado) {
   int numeroEsperado =
     partida.secuencia[partida.posicionActual];
 
-  Serial.print("Esperado: ");
-  Serial.print(numeroEsperado);
-  Serial.print(" | Recibido: ");
-  Serial.println(numeroPulsado);
-
   if (numeroPulsado != numeroEsperado) {
     perderPorError(numeroPulsado, numeroEsperado);
     return;
   }
 
   partida.posicionActual++;
+
   mostrarProgresoRespuesta();
 
   if (partida.posicionActual >= partida.longitudSecuencia) {
@@ -547,29 +725,29 @@ void superarRonda() {
   estadoActual = RONDA_SUPERADA;
   partida.rondasAcertadas++;
 
-  unsigned long tiempoUtilizado =
-    millis() - partida.inicioRespuesta;
-
   apagarSalidas();
+
   digitalWrite(LED_VERDE, HIGH);
+
   tone(BUZZER, 1200);
   delay(150);
   noTone(BUZZER);
 
   char lineaRondas[17];
+
   snprintf(
     lineaRondas,
     sizeof(lineaRondas),
     "Rondas: %d",
     partida.rondasAcertadas
   );
+
   mostrarMensaje("CORRECTO!", lineaRondas);
 
-  Serial.print("Ronda superada en ");
-  Serial.print(tiempoUtilizado);
-  Serial.println(" ms");
+  Serial.println("Ronda superada");
 
   delay(1500);
+
   digitalWrite(LED_VERDE, LOW);
 
   if (partida.longitudSecuencia < LONGITUD_MAXIMA) {
@@ -598,7 +776,11 @@ void perderPorTiempo() {
       partida.secuencia[partida.posicionActual];
   }
 
-  finalizarPartida(FIN_POR_TIEMPO, teclaEsperada, -1);
+  finalizarPartida(
+    FIN_POR_TIEMPO,
+    teclaEsperada,
+    -1
+  );
 }
 
 void finalizarPartida(
@@ -607,12 +789,15 @@ void finalizarPartida(
   int teclaRecibida
 ) {
   estadoActual = JUEGO_TERMINADO;
+
   partida.motivoFin = motivo;
   partida.teclaEsperadaFinal = teclaEsperada;
   partida.teclaRecibidaFinal = teclaRecibida;
 
   apagarSalidas();
+
   digitalWrite(LED_ROJO, HIGH);
+
   tone(BUZZER, 300);
   delay(400);
   noTone(BUZZER);
@@ -626,33 +811,38 @@ void finalizarPartida(
   }
 
   delay(1600);
+
   digitalWrite(LED_ROJO, LOW);
 
-  ResultadoPartida resultado = construirResultadoFinal();
+  ResultadoPartida resultado =
+    construirResultadoFinal();
+
   procesarResultadoFinal(resultado);
 }
 
-// Resultado final y futura persistencia
+// ------------------------------------------------------------
+// Resultado final y persistencia
+// ------------------------------------------------------------
+
 ResultadoPartida construirResultadoFinal() {
   ResultadoPartida resultado = {};
 
-  strncpy(
-    resultado.nombre,
-    jugador.nombre,
-    LONGITUD_NOMBRE_MAXIMA
-  );
-  resultado.nombre[LONGITUD_NOMBRE_MAXIMA] = '\0';
-  resultado.puntaje = calcularPuntaje(partida.rondasAcertadas);
-  resultado.rondasAcertadas = partida.rondasAcertadas;
-  resultado.rondaAlcanzada = partida.rondasAcertadas + 1;
-  resultado.motivoFin = partida.motivoFin;
-  resultado.teclaEsperada = partida.teclaEsperadaFinal;
-  resultado.teclaRecibida = partida.teclaRecibidaFinal;
+  resultado.nombre = jugador.nombre;
+  resultado.puntaje =
+    calcularPuntaje(partida.rondasAcertadas);
+
+  resultado.rondasAcertadas =
+    partida.rondasAcertadas;
+
+  resultado.rondaAlcanzada =
+    partida.rondasAcertadas + 1;
 
   return resultado;
 }
 
-void mostrarResultadoLCD(const ResultadoPartida& resultado) {
+void mostrarResultadoLCD(
+  const ResultadoPartida& resultado
+) {
   char lineaPuntaje[17];
   char lineaRondas[17];
 
@@ -660,9 +850,10 @@ void mostrarResultadoLCD(const ResultadoPartida& resultado) {
     lineaPuntaje,
     sizeof(lineaPuntaje),
     "%s Pts:%d",
-    resultado.nombre,
+    resultado.nombre.c_str(),
     resultado.puntaje
   );
+
   snprintf(
     lineaRondas,
     sizeof(lineaRondas),
@@ -673,90 +864,138 @@ void mostrarResultadoLCD(const ResultadoPartida& resultado) {
   mostrarMensaje(lineaPuntaje, lineaRondas);
 }
 
-void mostrarResultadoSerial(const ResultadoPartida& resultado) {
+void mostrarResultadoSerial(
+  const ResultadoPartida& resultado
+) {
   Serial.println();
-  Serial.println("========== RESUMEN =============");
+  Serial.println("========== RESULTADO ==========");
   Serial.print("Jugador: ");
   Serial.println(resultado.nombre);
+
   Serial.print("Puntaje: ");
   Serial.println(resultado.puntaje);
+
   Serial.print("Rondas acertadas: ");
   Serial.println(resultado.rondasAcertadas);
+
   Serial.print("Ronda alcanzada: ");
   Serial.println(resultado.rondaAlcanzada);
-  Serial.print("Motivo de finalizacion: ");
-  Serial.println(textoMotivoFin(resultado.motivoFin));
 
-  if (resultado.motivoFin == FIN_POR_ERROR) {
-    Serial.print("Tecla esperada: ");
-    Serial.println(resultado.teclaEsperada);
-    Serial.print("Tecla recibida: ");
-    Serial.println(resultado.teclaRecibida);
-  } else if (resultado.motivoFin == FIN_POR_TIEMPO) {
-    Serial.print("Siguiente tecla esperada: ");
-    Serial.println(resultado.teclaEsperada);
-  }
+  Serial.print("Finalizacion: ");
+  Serial.println(textoMotivoFin(partida.motivoFin));
 
-  Serial.println("================================");
+  Serial.println("===============================");
 }
 
-void procesarResultadoFinal(const ResultadoPartida& resultado) {
+void procesarResultadoFinal(
+  const ResultadoPartida& resultado
+) {
+  // Muestra primero el resultado obtenido.
   mostrarResultadoLCD(resultado);
   mostrarResultadoSerial(resultado);
+
+  delay(1800);
+
+  // Informa al jugador que se está realizando el envío.
+  if (!envioIntentado) {
+    envioIntentado = true;
+
+    mostrarMensaje("Guardando...", "Por favor");
+
+    resultadoGuardado =
+      enviarResultado(resultado);
+  }
+
+  // Muestra el estado final del guardado.
+  if (resultadoGuardado) {
+    mostrarMensaje("Resultado", "guardado");
+  } else {
+    mostrarMensaje("No se guardo", "Intenta luego");
+  }
+
   delay(1800);
 
   Serial.println("Pulsa START para jugar otra vez");
 
   char lineaRondas[17];
+
   snprintf(
     lineaRondas,
     sizeof(lineaRondas),
     "Rondas: %d",
     resultado.rondasAcertadas
   );
+
   mostrarMensaje(lineaRondas, "START: nuevo");
 }
 
-// Inicio y bucle principal
+// ------------------------------------------------------------
+// Configuración inicial
+// ------------------------------------------------------------
+
 void setup() {
+  // Inicializa el monitor serial.
   Serial.begin(115200);
 
+  // Configura LEDs y buzzer como salidas.
   pinMode(LED_ROJO, OUTPUT);
   pinMode(LED_VERDE, OUTPUT);
   pinMode(BUZZER, OUTPUT);
+
   apagarSalidas();
 
+  // Inicializa la pantalla LCD mediante I2C.
   Wire.begin(21, 22);
   lcd.init();
   lcd.backlight();
 
-  IrReceiver.begin(PIN_IR, DISABLE_LED_FEEDBACK);
+  // Inicializa el receptor infrarrojo.
+  IrReceiver.begin(
+    PIN_IR,
+    DISABLE_LED_FEEDBACK
+  );
+
+  // Inicializa la generación aleatoria de secuencias.
   randomSeed(micros());
 
-  Serial.println("Reflex Code VS iniciado");
-  mostrarMensaje("Reflex Code VS", "Cargando...");
+  Serial.println("Reflex iniciado");
+
+  mostrarMensaje("Reflex", "Cargando...");
+
   delay(1000);
+
   iniciarIngresoNombre();
 }
 
+// ------------------------------------------------------------
+// Bucle principal
+// ------------------------------------------------------------
+
 void loop() {
+  // Actualiza el temporizador mientras el jugador responde.
   actualizarTiempoRespuesta();
 
+  // Termina esta iteración si no se recibió una señal IR.
   if (!IrReceiver.decode()) {
     return;
   }
 
-  uint16_t comando = IrReceiver.decodedIRData.command;
+  uint16_t comando =
+    IrReceiver.decodedIRData.command;
+
   bool esRepeticion =
     IrReceiver.decodedIRData.flags &
     IRDATA_FLAGS_IS_REPEAT;
 
+  // Prepara el receptor para recibir el siguiente comando.
   IrReceiver.resume();
 
+  // Descarta repeticiones automáticas del control remoto.
   if (esRepeticion) {
     return;
   }
 
+  // Procesa el comando según el estado actual del juego.
   switch (estadoActual) {
     case INGRESANDO_NOMBRE:
       if (comando == TECLA_ACEPTAR) {
@@ -769,10 +1008,13 @@ void loop() {
       break;
 
     case ESPERANDO_RESPUESTA: {
-      int numeroPulsado = obtenerNumeroTecla(comando);
+      int numeroPulsado =
+        obtenerNumeroTecla(comando);
+
       if (numeroPulsado != -1) {
         procesarRespuesta(numeroPulsado);
       }
+
       break;
     }
 
