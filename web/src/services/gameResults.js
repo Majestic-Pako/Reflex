@@ -3,15 +3,48 @@ import { supabase } from './supabase'
 export async function obtenerJugadores() {
   const { data, error } = await supabase
     .from('jugadores')
-    .select('id, nombre, puntaje, rondas_acertadas, ronda_alcanzada, updated_at')
-    .order('puntaje', { ascending: false })
-    .order('ronda_alcanzada', { ascending: false })
+    .select('*')
 
   if (error) {
+    console.error('Error al obtener jugadores:', error)
     throw error
   }
 
   return data ?? []
+}
+
+export function subscribeToGameResults(onInsert, onStatusChange) {
+  return supabase
+    .channel('jugadores-inserts')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'jugadores',
+      },
+      (payload) => {
+        console.info('Nueva partida recibida en tiempo real:', payload.new)
+        onInsert?.(payload.new)
+      },
+    )
+    .subscribe((status, error) => {
+      console.info('Estado Supabase Realtime:', status)
+
+      if (error) {
+        console.error('Error en Supabase Realtime:', error)
+      } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(status)) {
+        console.error(`Supabase Realtime finalizo con estado: ${status}`)
+      }
+
+      onStatusChange?.(status, error)
+    })
+}
+
+export async function unsubscribeFromGameResults(channel) {
+  if (!channel) return
+
+  await supabase.removeChannel(channel)
 }
 
 /**
