@@ -1,27 +1,100 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   Activity,
   Clock3,
   Cpu,
   Database,
   Eye,
+  ExternalLink,
   Gamepad2,
   Keyboard,
   Monitor,
   Radio,
   Trophy,
+  Zap,
 } from 'lucide-vue-next'
 import AppFooter from '../components/AppFooter.vue'
 import AppHeader from '../components/AppHeader.vue'
-import LatestResult from '../components/LatestResult.vue'
 import RankingTable from '../components/RankingTable.vue'
 import StatsOverview from '../components/StatsOverview.vue'
-import { obtenerJugadores } from '../services/gameResults'
+import {
+  obtenerJugadores,
+  subscribeToGameResults,
+  unsubscribeFromGameResults,
+} from '../services/gameResults'
 
 const resultados = ref([])
 const isLoading = ref(true)
 const errorMessage = ref('')
+let resultsChannel = null
+let loadingResultsPromise = null
+let realtimeResynced = false
+let viewIsMounted = false
+
+const normalizeResult = (row) => ({
+  ...row,
+  puntaje: Number(row.puntaje ?? 0),
+  rondas_acertadas: Number(row.rondas_acertadas ?? 0),
+  ronda_alcanzada: Number(row.ronda_alcanzada ?? 0),
+})
+
+const mergeResultsById = (currentResults, incomingResults) => {
+  const merged = [...currentResults]
+  const indexesById = new Map(
+    merged
+      .map((result, index) => [result.id, index])
+      .filter(([id]) => id != null)
+      .map(([id, index]) => [String(id), index]),
+  )
+
+  for (const row of incomingResults) {
+    const result = normalizeResult(row)
+    const id = result.id == null ? null : String(result.id)
+
+    if (id !== null && indexesById.has(id)) {
+      merged[indexesById.get(id)] = result
+    } else {
+      if (id !== null) indexesById.set(id, merged.length)
+      merged.push(result)
+    }
+  }
+
+  return merged
+}
+
+const loadResults = () => {
+  if (loadingResultsPromise) return loadingResultsPromise
+
+  loadingResultsPromise = (async () => {
+    try {
+      const data = await obtenerJugadores()
+      if (!viewIsMounted) return
+
+      resultados.value = mergeResultsById(
+        resultados.value,
+        Array.isArray(data) ? data : [],
+      )
+      errorMessage.value = ''
+      console.info(`Resultados reales cargados desde Supabase: ${resultados.value.length}`)
+    } catch (error) {
+      console.error('Error al cargar los resultados de Reflex:', error)
+      if (viewIsMounted) {
+        errorMessage.value = 'No pudimos actualizar los resultados. El resto del sitio sigue disponible.'
+      }
+    } finally {
+      if (viewIsMounted) isLoading.value = false
+      loadingResultsPromise = null
+    }
+  })()
+
+  return loadingResultsPromise
+}
+
+const addRealtimeResult = (row) => {
+  if (!viewIsMounted) return
+  resultados.value = mergeResultsById(resultados.value, [row])
+}
 
 const resultadosOrdenados = computed(() =>
   [...resultados.value].sort(
@@ -30,6 +103,16 @@ const resultadosOrdenados = computed(() =>
       Number(b.ronda_alcanzada ?? 0) - Number(a.ronda_alcanzada ?? 0),
   ),
 )
+
+const mejorResultado = computed(() => resultadosOrdenados.value[0] ?? null)
+
+const diferenciaConSegundo = computed(() => {
+  const [primero, segundo] = resultadosOrdenados.value
+
+  if (!primero || !segundo) return null
+
+  return Number(primero.puntaje ?? 0) - Number(segundo.puntaje ?? 0)
+})
 
 const ultimaPartida = computed(() => {
   if (!resultados.value.length) return null
@@ -62,17 +145,24 @@ const ultimaPartida = computed(() => {
   return resultados.value.at(-1)
 })
 
-onMounted(async () => {
-  try {
-    const data = await obtenerJugadores()
-    resultados.value = Array.isArray(data) ? data : []
-    console.info(`Resultados reales cargados desde Supabase: ${resultados.value.length}`)
-  } catch (error) {
-    console.error('Error al cargar los resultados de Reflex Code:', error)
-    errorMessage.value = 'No pudimos actualizar los resultados. El resto del sitio sigue disponible.'
-  } finally {
-    isLoading.value = false
-  }
+onMounted(() => {
+  viewIsMounted = true
+  resultsChannel = subscribeToGameResults(addRealtimeResult, async (status) => {
+    if (status === 'SUBSCRIBED' && !realtimeResynced) {
+      realtimeResynced = true
+      const initialLoadWasInProgress = loadingResultsPromise !== null
+      await loadResults()
+      if (initialLoadWasInProgress && viewIsMounted) await loadResults()
+    }
+  })
+
+  loadResults()
+})
+
+onUnmounted(async () => {
+  viewIsMounted = false
+  await unsubscribeFromGameResults(resultsChannel)
+  resultsChannel = null
 })
 
 const steps = [
@@ -100,6 +190,9 @@ const technologies = [
   { label: 'Supabase', icon: Database },
   { label: 'Wokwi', icon: Keyboard },
 ]
+
+const wokwiUrl = 'https://wokwi.com/projects/469231128370292737'
+
 </script>
 
 <template>
@@ -109,7 +202,10 @@ const technologies = [
     <section id="inicio" class="hero section-shell" aria-labelledby="hero-title">
       <div class="hero__content">
         <p class="eyebrow"><Gamepad2 :size="16" /> Juego de memoria y reflejos</p>
-        <h1 id="hero-title">Reflex <span>Code</span></h1>
+        <h1 id="hero-title" class="brand-title" aria-label="Reflex">
+          <Zap class="brand-title__icon" :size="34" aria-hidden="true" />
+          <span class="brand-title__accent">Ref</span><span class="brand-title__neutral">lex</span>
+        </h1>
         <p class="hero__lead">Poné a prueba tu memoria, velocidad y precisión.</p>
         <p class="hero__description">
           Observá la secuencia, repetila con el control remoto y avanzá de ronda para
@@ -176,12 +272,32 @@ const technologies = [
       <RankingTable :results="resultadosOrdenados" :loading="isLoading" />
     </section>
 
-    <section class="section-shell section-block latest-section" aria-labelledby="latest-title">
-      <div class="section-heading section-heading--compact">
-        <p class="eyebrow">Actividad reciente</p>
-        <h2 id="latest-title">Última partida</h2>
+    <section class="section-shell section-block record-section" aria-labelledby="record-title">
+      <div class="record-card" :aria-busy="isLoading">
+        <div class="record-card__content">
+          <p class="eyebrow"><Trophy :size="16" /> Récord actual</p>
+          <h2 id="record-title">
+            {{ mejorResultado?.nombre || 'Todavía no hay líder' }}
+          </h2>
+          <p v-if="mejorResultado">La mejor marca registrada hasta el momento.</p>
+          <p v-else>El primer resultado destacado aparecerá acá.</p>
+        </div>
+
+        <dl v-if="mejorResultado" class="record-card__stats">
+          <div>
+            <dt>Puntaje</dt>
+            <dd>{{ mejorResultado.puntaje }}</dd>
+          </div>
+          <div>
+            <dt>Ronda</dt>
+            <dd>{{ mejorResultado.ronda_alcanzada }}</dd>
+          </div>
+          <div v-if="diferenciaConSegundo !== null">
+            <dt>Ventaja</dt>
+            <dd>+{{ diferenciaConSegundo }}</dd>
+          </div>
+        </dl>
       </div>
-      <LatestResult :result="ultimaPartida" :loading="isLoading" />
     </section>
 
     <section id="funcionamiento" class="section-shell section-block" aria-labelledby="how-title">
@@ -207,11 +323,22 @@ const technologies = [
         <p class="eyebrow">Tecnologías</p>
         <h2 id="tech-title">Un sistema conectado de punta a punta</h2>
       </div>
-      <ul class="tech-list" aria-label="Tecnologías utilizadas">
-        <li v-for="technology in technologies" :key="technology.label">
-          <component :is="technology.icon" :size="19" /> {{ technology.label }}
-        </li>
-      </ul>
+      <div class="technologies__resources">
+        <ul class="tech-list" aria-label="Tecnologías utilizadas">
+          <li v-for="technology in technologies" :key="technology.label">
+            <component :is="technology.icon" :size="19" /> {{ technology.label }}
+          </li>
+        </ul>
+        <a
+          class="technology-link"
+          :href="wokwiUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <ExternalLink :size="17" aria-hidden="true" />
+          Abrir simulación en Wokwi
+        </a>
+      </div>
     </section>
   </main>
 

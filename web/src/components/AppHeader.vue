@@ -1,13 +1,13 @@
 <script setup>
-import { Gamepad2, Menu } from 'lucide-vue-next'
+import { Menu, Zap } from 'lucide-vue-next'
 </script>
 
 <template>
   <header class="site-header">
     <div class="site-header__inner section-shell">
-      <a class="brand" href="#inicio" aria-label="Reflex Code, volver al inicio">
-        <span class="brand__mark"><Gamepad2 :size="20" /></span>
-        Reflex Code
+      <a class="brand" href="#inicio" aria-label="Ir al inicio de Reflex">
+        <Zap class="brand__icon" :size="22" aria-hidden="true" />
+        <span class="brand__accent">Ref</span><span class="brand__neutral">lex</span>
       </a>
 
       <nav class="desktop-nav" aria-label="Navegación principal">
