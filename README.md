@@ -11,12 +11,27 @@
 
 ---
 <p align="center">
-  <strong>Reflex</strong> es un juego de reflejos para dos jugadores desarrollado con Arduino.
+  <strong>Reflex Code VS</strong> es un juego de reflejos para dos jugadores, ahora organizado en una versión estable con Arduino UNO y una nueva arquitectura con ESP32 y Vue.
 </p>
 
 <p align="center">
   El sistema utiliza una secuencia visual y sonora para preparar la partida, genera señales falsas para evitar respuestas anticipadas y detecta qué jugador reacciona primero ante la señal real.
 </p>
+
+## Estructura del proyecto
+
+- [`hardware/arduino-uno`](hardware/arduino-uno): versión anterior y estable del proyecto. Su código funcional se conserva sin cambios.
+- [`hardware/esp32`](hardware/esp32): base de la nueva versión, que será simulada en Wokwi. La lógica y las conexiones todavía están pendientes.
+- [`web`](web): aplicación Vue 3 con Vite que mostrará puntaje, errores y victorias.
+- [`docs`](docs): documentación existente del proyecto.
+
+La arquitectura prevista para la nueva versión es:
+
+```text
+ESP32 en Wokwi → Supabase → Vue
+```
+
+El cliente de Supabase está configurado en el frontend. El esquema de datos y la persistencia de partidas todavía están pendientes.
 
 ## Funcionalidades
 
@@ -68,7 +83,7 @@
   <tr>
     <td><strong>Código fuente</strong></td>
     <td>Archivo principal del proyecto Arduino.</td>
-    <td><a href="src/reflex.ino">src/reflex.ino</a></td>
+    <td><a href="hardware/arduino-uno/reflex-arduino-uno.ino">hardware/arduino-uno/reflex-arduino-uno.ino</a></td>
   </tr>
   <tr>
     <td><strong>Diagrama de conexión</strong></td>
@@ -92,3 +107,13 @@
 <p align="center">
   <img src="docs/img/diagrama-conexion-v2.0.png" alt="Diagrama de conexión del prototipo Reflex" width="700">
 </p>
+
+## Aplicación web
+
+Para iniciar el frontend en modo de desarrollo:
+
+```bash
+cd web
+npm install
+npm run dev
+```
